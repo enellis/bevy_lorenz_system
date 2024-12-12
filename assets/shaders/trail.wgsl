@@ -9,7 +9,6 @@
 
 @fragment
 fn fragment() -> @location(0) vec4<f32> {
-    // let alpha = 1 - ((globals.time - birth_time) / lifetime);
-    // return vec4<f32>(material_color.rgb, alpha);
-    return material_color;
+    let alpha = 1 - ((globals.time - birth_time) / lifetime);
+    return vec4<f32>(material_color.rgb, alpha);
 }
