@@ -36,21 +36,44 @@ struct End;
 #[derive(Component)]
 struct Birth(f32);
 
+#[derive(Default, Resource)]
+struct TrailInstance {
+    mesh: Handle<Mesh>,
+    material: Handle<TrailMaterial>,
+}
+
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<SimpleColor>>,
+    mut simple_color_materials: ResMut<Assets<SimpleColor>>,
+    mut trail_materials: ResMut<Assets<TrailMaterial>>,
 ) {
-    let main_material = materials.add(SimpleColor {
+    let main_material = simple_color_materials.add(SimpleColor {
         color: WHITE.into(),
     });
     let sphere_mesh = meshes.add(Sphere::default());
+
+    let trail_material = trail_materials.add(TrailMaterial {
+        color: GREY.into(),
+        birth_time: 0.,
+        lifetime: 100000000000.,
+    });
+    let trail_mesh = meshes.add(
+        CylinderMeshBuilder::new(0.1, 1., 4)
+            .anchor(CylinderAnchor::Bottom)
+            .without_caps()
+            .build(),
+    );
+    commands.insert_resource(TrailInstance {
+        material: trail_material,
+        mesh: trail_mesh,
+    });
 
     // create a simple Perf UI with default settings
     // and all entries provided by the crate:
     commands.spawn(PerfUiDefaultEntries::default());
 
-    for i in 1..=25 {
+    for i in 1..=100 {
         let init_cond = i as f32 * 0.05;
         commands.spawn((
             Mesh3d(sphere_mesh.clone()),
@@ -70,29 +93,24 @@ fn setup(
 const LIFETIME: f32 = 4.;
 
 fn remove_old_ones(
-    query: Query<(Entity, &Birth, &Mesh3d, &MeshMaterial3d<TrailMaterial>)>,
+    mut query: Query<(Entity, &Birth, &mut Transform)>,
     mut commands: Commands,
-    mut materials: ResMut<Assets<TrailMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
     time: Res<Time>,
 ) {
-    query
-        .iter()
-        .for_each(|(entity, birth, mesh_3d, mesh_material)| {
-            if time.elapsed_secs() - birth.0 > LIFETIME {
-                commands.entity(entity).despawn();
-                meshes.remove(mesh_3d);
-                materials.remove(mesh_material);
-            }
-        });
+    query.iter_mut().for_each(|(entity, birth, mut transform)| {
+        let ratio = (time.elapsed_secs() - birth.0) / LIFETIME;
+        transform.scale.z = 1. - ratio;
+        if ratio > 1. {
+            commands.entity(entity).despawn();
+        }
+    });
 }
 
 fn update_position(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<TrailMaterial>>,
     time: Res<Time>,
     mut query: Query<&mut Transform, With<End>>,
+    trail_instance: Res<TrailInstance>,
 ) {
     const SIGMA: f32 = 10.;
     const RHO: f32 = 28.;
@@ -110,29 +128,12 @@ fn update_position(
         let new_translation = old_translation + delta;
         transform.translation = new_translation;
 
-        let material = materials.add(TrailMaterial {
-            alpha_mode: AlphaMode::Blend,
-            color: GREY.into(),
-            birth_time: time.elapsed_secs(),
-            lifetime: LIFETIME,
-        });
-
         commands.spawn((
-            Mesh3d(
-                meshes.add(
-                    CylinderMeshBuilder::new(0.1, delta.length(), 4)
-                        .anchor(CylinderAnchor::Bottom)
-                        .without_caps()
-                        .build(),
-                ),
-            ),
-            MeshMaterial3d(material.clone()),
-            Transform::from_translation(old_translation).aligned_by(
-                Dir3::Y,
-                delta,
-                Dir3::X,
-                Dir3::X,
-            ),
+            Mesh3d(trail_instance.mesh.clone()),
+            MeshMaterial3d(trail_instance.material.clone()),
+            Transform::from_translation(old_translation)
+                .with_scale(Vec3::new(1., delta.length(), 1.))
+                .aligned_by(Dir3::Y, delta, Dir3::X, Dir3::X),
             Birth(time.elapsed_secs()),
         ));
     }
@@ -146,7 +147,6 @@ struct TrailMaterial {
     birth_time: f32,
     #[uniform(2)]
     lifetime: f32,
-    alpha_mode: AlphaMode,
 }
 
 impl Material for TrailMaterial {
@@ -155,7 +155,7 @@ impl Material for TrailMaterial {
     }
 
     fn alpha_mode(&self) -> AlphaMode {
-        self.alpha_mode
+        AlphaMode::Blend
     }
 }
 
