@@ -2,5 +2,5 @@
 
 @fragment
 fn fragment() -> @location(0) vec4<f32> {
-    return material_color * 0.6;
+    return material_color;
 }

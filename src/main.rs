@@ -1,5 +1,4 @@
 use bevy::{
-    color::palettes::css::{GREY, WHITE},
     prelude::*,
     render::{
         mesh::{CylinderAnchor, CylinderMeshBuilder},
@@ -11,7 +10,7 @@ use bevy_inspector_egui::quick::ResourceInspectorPlugin;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use iyes_perf_ui::prelude::*;
 
-const NUM_OF_TRAILS: i32 = 5;
+const NUM_OF_TRAILS: i32 = 10;
 const DIST_BTWN_TRAILS: f32 = 0.01;
 const TRAIL_LIFETIME: u16 = 50;
 const DELTA_T: u8 = 50;
@@ -29,13 +28,13 @@ struct Configuration {
 struct End;
 
 #[derive(Component)]
-struct Birth(f32);
-
-#[derive(Default, Resource)]
-struct TrailInstance {
+struct TrailData {
     mesh: Handle<Mesh>,
     material: Handle<SimpleColor>,
 }
+
+#[derive(Component)]
+struct Birth(f32);
 
 fn main() {
     App::new()
@@ -71,36 +70,40 @@ fn setup(
     mut simple_color_materials: ResMut<Assets<SimpleColor>>,
     config: Res<Configuration>,
 ) {
-    let main_material = simple_color_materials.add(SimpleColor {
-        color: WHITE.into(),
-    });
-    let sphere_mesh = meshes.add(Sphere::new(0.3));
+    commands.insert_resource(Time::<Fixed>::from_hz(config.physics_refresh_rate as f64));
 
-    let trail_material = simple_color_materials.add(SimpleColor { color: GREY.into() });
+    let sphere_mesh = meshes.add(Sphere::new(0.3));
     let trail_mesh = meshes.add(
         CylinderMeshBuilder::new(0.12, 1., 32)
             .anchor(CylinderAnchor::Bottom)
             .without_caps()
             .build(),
     );
-    commands.insert_resource(TrailInstance {
-        material: trail_material,
-        mesh: trail_mesh,
-    });
-
-    commands.insert_resource(Time::<Fixed>::from_hz(config.physics_refresh_rate as f64));
 
     // create a simple Perf UI with default settings
     // and all entries provided by the crate:
     commands.spawn(PerfUiDefaultEntries::default());
 
     for i in 1..=NUM_OF_TRAILS {
+        let ratio = i as f32 / NUM_OF_TRAILS as f32;
+        let main_color = Srgba::rgb(ratio, 1. - ratio / 3., 1. - ratio / 3.);
+        let main_material = simple_color_materials.add(SimpleColor {
+            color: main_color.into(),
+        });
+        let trail_color = simple_color_materials.add(SimpleColor {
+            color: main_color.darker(0.3).into(),
+        });
+
         let init_cond = i as f32 * DIST_BTWN_TRAILS;
         commands.spawn((
             Mesh3d(sphere_mesh.clone()),
             MeshMaterial3d(main_material.clone()),
             Transform::from_xyz(init_cond, init_cond, init_cond),
             End,
+            TrailData {
+                mesh: trail_mesh.clone(),
+                material: trail_color.clone(),
+            },
         ));
     }
 
@@ -143,15 +146,14 @@ fn remove_old_ones(query: Query<(Entity, &Birth)>, mut commands: Commands) {
 fn update_position(
     mut commands: Commands,
     time: Res<Time<Virtual>>,
-    mut query: Query<&mut Transform, With<End>>,
-    trail_instance: Res<TrailInstance>,
+    mut query: Query<(&mut Transform, &TrailData), With<End>>,
     config: Res<Configuration>,
 ) {
     const SIGMA: f32 = 10.;
     const RHO: f32 = 28.;
     const BETA: f32 = 8. / 3.;
 
-    for mut transform in &mut query {
+    for (mut transform, trail_data) in &mut query {
         let old_translation = transform.translation.clone();
 
         let dx = SIGMA * (old_translation.y - old_translation.x);
@@ -164,8 +166,8 @@ fn update_position(
         transform.translation = new_translation;
 
         commands.spawn((
-            Mesh3d(trail_instance.mesh.clone()),
-            MeshMaterial3d(trail_instance.material.clone()),
+            Mesh3d(trail_data.mesh.clone()),
+            MeshMaterial3d(trail_data.material.clone()),
             Transform::from_translation(old_translation)
                 .with_scale(Vec3::new(1., delta.length(), 1.))
                 .aligned_by(Dir3::Y, delta, Dir3::X, Dir3::X),
