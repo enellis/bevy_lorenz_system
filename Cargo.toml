@@ -1,7 +1,10 @@
 [package]
-name = "bevy-cc"
+name = "bevy_lorenz_system"
 version = "0.1.0"
+authors = ["enellis"]
 edition = "2021"
+description = "Lorenz system rendered in Bevy"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 bevy = { version = "0.15.0", features = ["dynamic_linking"] }

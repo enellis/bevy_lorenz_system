@@ -351,16 +351,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy-cc"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy-inspector-egui",
- "bevy_panorbit_camera",
- "iyes_perf_ui",
-]
-
-[[package]]
 name = "bevy-inspector-egui"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -903,6 +893,16 @@ dependencies = [
  "tracing-oslog",
  "tracing-subscriber",
  "tracing-wasm",
+]
+
+[[package]]
+name = "bevy_lorenz_system"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy-inspector-egui",
+ "bevy_panorbit_camera",
+ "iyes_perf_ui",
 ]
 
 [[package]]
