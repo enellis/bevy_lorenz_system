@@ -86,12 +86,12 @@ fn setup(
 
     for i in 1..=NUM_OF_TRAILS {
         let ratio = i as f32 / NUM_OF_TRAILS as f32;
-        let main_color = Srgba::rgb(ratio, 1. - ratio / 3., 1. - ratio / 3.);
+        let main_color = Hsla::hsl(ratio * 360., 0.7, 0.5);
         let main_material = simple_color_materials.add(SimpleColor {
             color: main_color.into(),
         });
         let trail_color = simple_color_materials.add(SimpleColor {
-            color: main_color.darker(0.3).into(),
+            color: main_color.with_saturation(0.3).into(),
         });
 
         let init_cond = i as f32 * DIST_BTWN_TRAILS;
