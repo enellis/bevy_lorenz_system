@@ -25,7 +25,7 @@ struct Configuration {
 
 /// A marker component for our shapes so we can query them separately from the ground plane
 #[derive(Component)]
-struct End;
+struct Head;
 
 #[derive(Component)]
 struct TrailData {
@@ -96,10 +96,10 @@ fn setup(
 
         let init_cond = i as f32 * DIST_BTWN_TRAILS;
         commands.spawn((
+            Head,
             Mesh3d(sphere_mesh.clone()),
             MeshMaterial3d(main_material.clone()),
             Transform::from_xyz(init_cond, init_cond, init_cond),
-            End,
             TrailData {
                 mesh: trail_mesh.clone(),
                 material: trail_color.clone(),
@@ -146,7 +146,7 @@ fn remove_old_ones(query: Query<(Entity, &Birth)>, mut commands: Commands) {
 fn update_position(
     mut commands: Commands,
     time: Res<Time<Virtual>>,
-    mut query: Query<(&mut Transform, &TrailData), With<End>>,
+    mut query: Query<(&mut Transform, &TrailData), With<Head>>,
     config: Res<Configuration>,
 ) {
     const SIGMA: f32 = 10.;
