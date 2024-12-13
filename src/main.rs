@@ -116,7 +116,7 @@ fn setup(
 
 fn check_config_change(config: Res<Configuration>, mut fixed_time: ResMut<Time<Fixed>>) {
     if config.is_changed() {
-        *fixed_time = Time::<Fixed>::from_hz(std::cmp::max(config.physics_refresh_rate, 1) as f64);
+        fixed_time.set_timestep_hz(std::cmp::max(config.physics_refresh_rate, 1) as f64);
     }
 }
 
