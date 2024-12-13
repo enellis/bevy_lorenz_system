@@ -42,7 +42,6 @@ fn main() {
         .add_plugins((
             DefaultPlugins,
             MaterialPlugin::<SimpleColor>::default(),
-            MaterialPlugin::<TrailMaterial>::default(),
             PanOrbitCameraPlugin,
         ))
         // we want Bevy to measure these values for us:
@@ -172,26 +171,6 @@ fn update_position(
                 .aligned_by(Dir3::Y, delta, Dir3::X, Dir3::X),
             Birth(time.elapsed_secs()),
         ));
-    }
-}
-
-#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
-struct TrailMaterial {
-    #[uniform(0)]
-    color: LinearRgba,
-    #[uniform(1)]
-    birth_time: f32,
-    #[uniform(2)]
-    lifetime: f32,
-}
-
-impl Material for TrailMaterial {
-    fn fragment_shader() -> ShaderRef {
-        "shaders/trail.wgsl".into()
-    }
-
-    fn alpha_mode(&self) -> AlphaMode {
-        AlphaMode::Blend
     }
 }
 
