@@ -12,7 +12,7 @@ use iyes_perf_ui::prelude::*;
 
 const NUM_OF_TRAILS: i32 = 10;
 const DIST_BTWN_TRAILS: f32 = 0.01;
-const TRAIL_LIFETIME: u16 = 50;
+const TRAIL_LIFETIME: u16 = 100;
 const DELTA_T: u8 = 50;
 
 #[derive(Reflect, Resource, Default, InspectorOptions)]
@@ -47,12 +47,13 @@ fn main() {
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin)
         .add_plugins(bevy::diagnostic::SystemInformationDiagnosticsPlugin)
-        .add_plugins(PerfUiPlugin)
+        // .add_plugins(PerfUiPlugin)
         //
         .add_systems(Startup, setup)
         .add_systems(FixedUpdate, update_position)
         .add_systems(Update, (remove_old_ones, shrink_trail))
         .add_systems(Update, check_config_change)
+        .add_systems(Update, rotate_camera)
         //
         .insert_resource(Configuration {
             trail_lifetime: TRAIL_LIFETIME,
@@ -108,15 +109,23 @@ fn setup(
     }
 
     commands.spawn((
-        Transform::from_translation(Vec3::new(1., 0., 0.) * 100.)
-            .looking_at(Vec3::new(1., 1., 1.), Vec3::Y),
-        PanOrbitCamera::default(),
+        Transform::from_translation(Vec3::new(1., 0., 1.) * 80.),
+        PanOrbitCamera {
+            focus: Vec3::new(0., 0., 30.),
+            ..default()
+        },
     ));
 }
 
 fn check_config_change(config: Res<Configuration>, mut fixed_time: ResMut<Time<Fixed>>) {
     if config.is_changed() {
         fixed_time.set_timestep_hz(std::cmp::max(config.physics_refresh_rate, 1) as f64);
+    }
+}
+
+fn rotate_camera(mut query: Query<&mut PanOrbitCamera>) {
+    for mut camera in &mut query {
+        camera.target_yaw += 0.001;
     }
 }
 
