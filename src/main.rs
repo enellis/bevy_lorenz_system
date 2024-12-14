@@ -17,6 +17,7 @@ const DELTA_T: u8 = 50;
 #[derive(Reflect, Resource, InspectorOptions)]
 #[reflect(Resource, InspectorOptions)]
 struct Configuration {
+    show_diagnostics: bool,
     rotate_camera: bool,
     rotation_speed: i32,
     trail_lifetime: u16, // in tenths of a second
@@ -27,6 +28,7 @@ struct Configuration {
 impl Default for Configuration {
     fn default() -> Self {
         Self {
+            show_diagnostics: true,
             rotate_camera: false,
             rotation_speed: 10,
             trail_lifetime: TRAIL_LIFETIME,
@@ -62,6 +64,12 @@ fn main() {
             bevy::diagnostic::SystemInformationDiagnosticsPlugin,
         ))
         .add_plugins(PerfUiPlugin)
+        .add_systems(
+            Update,
+            toggle_diagnostics
+                .before(iyes_perf_ui::PerfUiSet::Setup)
+                .run_if(|config: Res<Configuration>| config.is_changed()),
+        )
         //
         .insert_resource(Configuration::default())
         .register_type::<Configuration>()
@@ -86,10 +94,6 @@ fn setup(
     config: Res<Configuration>,
 ) {
     commands.insert_resource(Time::<Fixed>::from_hz(config.physics_refresh_rate as f64));
-
-    // create a simple Perf UI with default settings
-    // and all entries provided by the crate:
-    commands.spawn(PerfUiDefaultEntries::default());
 
     let head_mesh = meshes.add(Sphere::new(0.3));
     let trail_mesh = meshes.add(
@@ -135,6 +139,22 @@ fn setup(
 fn check_config_change(config: Res<Configuration>, mut fixed_time: ResMut<Time<Fixed>>) {
     if config.is_changed() {
         fixed_time.set_timestep_hz(std::cmp::max(config.physics_refresh_rate, 1) as f64);
+    }
+}
+
+fn toggle_diagnostics(
+    mut commands: Commands,
+    q_root: Query<Entity, With<PerfUiRoot>>,
+    config: Res<Configuration>,
+) {
+    if config.show_diagnostics {
+        if q_root.get_single().is_err() {
+            commands.spawn(PerfUiDefaultEntries::default());
+        }
+    } else {
+        if let Ok(e) = q_root.get_single() {
+            commands.entity(e).despawn_recursive();
+        }
     }
 }
 
