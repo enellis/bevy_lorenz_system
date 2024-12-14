@@ -14,12 +14,26 @@ const INITIAL_DISTANCE: f32 = 0.01;
 const TRAIL_LIFETIME: u16 = 100; // in tenths of a second
 const DELTA_T: u8 = 50;
 
-#[derive(Reflect, Resource, Default, InspectorOptions)]
+#[derive(Reflect, Resource, InspectorOptions)]
 #[reflect(Resource, InspectorOptions)]
 struct Configuration {
+    rotate_camera: bool,
+    rotation_speed: i32,
     trail_lifetime: u16, // in tenths of a second
     delta_t: u8,
     physics_refresh_rate: u16,
+}
+
+impl Default for Configuration {
+    fn default() -> Self {
+        Self {
+            rotate_camera: false,
+            rotation_speed: 10,
+            trail_lifetime: TRAIL_LIFETIME,
+            delta_t: DELTA_T,
+            physics_refresh_rate: 120,
+        }
+    }
 }
 
 #[derive(Component)]
@@ -49,17 +63,16 @@ fn main() {
         ))
         .add_plugins(PerfUiPlugin)
         //
-        .insert_resource(Configuration {
-            trail_lifetime: TRAIL_LIFETIME,
-            delta_t: DELTA_T,
-            physics_refresh_rate: 120,
-        })
+        .insert_resource(Configuration::default())
         .register_type::<Configuration>()
         .add_plugins(ResourceInspectorPlugin::<Configuration>::default())
         //
         .add_systems(Startup, setup)
         .add_systems(Update, check_config_change)
-        // .add_systems(Update, rotate_camera)
+        .add_systems(
+            Update,
+            rotate_camera.run_if(|config: Res<Configuration>| config.rotate_camera),
+        )
         .add_systems(FixedUpdate, update_position)
         .add_systems(Update, (remove_old_trail_segments, shrink_trail_segments))
         //
@@ -125,11 +138,11 @@ fn check_config_change(config: Res<Configuration>, mut fixed_time: ResMut<Time<F
     }
 }
 
-// fn rotate_camera(mut query: Query<&mut PanOrbitCamera>) {
-//     for mut camera in &mut query {
-//         camera.target_yaw += 0.001;
-//     }
-// }
+fn rotate_camera(mut query: Query<&mut PanOrbitCamera>, config: Res<Configuration>) {
+    for mut camera in &mut query {
+        camera.target_yaw += config.rotation_speed as f32 / 10_000.;
+    }
+}
 
 fn update_position(
     mut query: Query<(&mut Transform, &TrailData), With<TrailHead>>,
