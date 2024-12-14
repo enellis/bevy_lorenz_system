@@ -85,7 +85,10 @@ fn main() {
             rotate_camera.run_if(|config: Res<Configuration>| config.rotate_camera),
         )
         .add_systems(FixedUpdate, update_position)
-        .add_systems(Update, (remove_old_trail_segments, shrink_trail_segments))
+        .add_systems(
+            Update,
+            (shrink_trail_segments, remove_old_trail_segments).chain(),
+        )
         //
         .run();
 }
