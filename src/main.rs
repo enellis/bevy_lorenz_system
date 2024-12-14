@@ -76,7 +76,10 @@ fn main() {
         .add_plugins(ResourceInspectorPlugin::<Configuration>::default())
         //
         .add_systems(Startup, setup)
-        .add_systems(Update, check_config_change)
+        .add_systems(
+            Update,
+            apply_physics_refresh_rate.run_if(|config: Res<Configuration>| config.is_changed()),
+        )
         .add_systems(
             Update,
             rotate_camera.run_if(|config: Res<Configuration>| config.rotate_camera),
@@ -136,10 +139,8 @@ fn setup(
     ));
 }
 
-fn check_config_change(config: Res<Configuration>, mut fixed_time: ResMut<Time<Fixed>>) {
-    if config.is_changed() {
-        fixed_time.set_timestep_hz(std::cmp::max(config.physics_refresh_rate, 1) as f64);
-    }
+fn apply_physics_refresh_rate(config: Res<Configuration>, mut fixed_time: ResMut<Time<Fixed>>) {
+    fixed_time.set_timestep_hz(std::cmp::max(config.physics_refresh_rate, 1) as f64);
 }
 
 fn toggle_diagnostics(
