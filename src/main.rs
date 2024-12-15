@@ -195,7 +195,7 @@ fn update_position(
             MeshMaterial3d(trail_data.material.clone()),
             Transform::from_translation(old_translation)
                 .with_scale(Vec3::new(1., delta.length(), 1.))
-                .aligned_by(Dir3::Y, delta, Dir3::X, Dir3::X),
+                .with_rotation(Quat::from_rotation_arc(Vec3::Y, delta.normalize())),
             TimeOfBirth(time.elapsed_secs()),
         ));
     }
