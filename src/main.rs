@@ -47,7 +47,7 @@ struct TrailData {
     material: Handle<SimpleColorMaterial>,
 }
 
-#[derive(Component)]
+#[derive(Component, Deref, DerefMut)]
 struct TimeOfBirth(f32);
 
 fn main() {
@@ -210,19 +210,19 @@ fn shrink_trail_segments(
         .par_iter_mut()
         .for_each(|(mut time_of_birth, mut transform)| {
             let ratio = 1.
-                - ((time.elapsed_secs() - time_of_birth.0) / (config.trail_lifetime as f32 / 10.));
+                - ((time.elapsed_secs() - **time_of_birth) / (config.trail_lifetime as f32 / 10.));
             transform.scale.x = ratio;
             transform.scale.z = ratio;
             if ratio < 0. {
                 // Set time of birth to 0, so we can clean it up later.
-                time_of_birth.0 = 0.
+                **time_of_birth = 0.
             }
         });
 }
 
 fn remove_old_trail_segments(query: Query<(Entity, &TimeOfBirth)>, mut commands: Commands) {
     query.iter().for_each(|(entity, time_of_birth)| {
-        if time_of_birth.0 == 0. {
+        if **time_of_birth == 0. {
             commands.entity(entity).despawn();
         }
     });
