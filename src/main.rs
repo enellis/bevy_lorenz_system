@@ -211,9 +211,10 @@ fn shrink_trail_segments(
         .for_each(|(mut time_of_birth, mut transform)| {
             let ratio = 1.
                 - ((time.elapsed_secs() - **time_of_birth) / (config.trail_lifetime as f32 / 10.));
-            transform.scale.x = ratio;
-            transform.scale.z = ratio;
-            if ratio < 0. {
+            if ratio > 0. {
+                transform.scale.x = ratio;
+                transform.scale.z = ratio;
+            } else {
                 // Set time of birth to 0, so we can clean it up later.
                 **time_of_birth = 0.
             }
