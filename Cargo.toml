@@ -15,6 +15,11 @@ bevy_panorbit_camera = { version = "0.21.1", features = ["bevy_egui"] }
 bytemuck = "1.20.0"
 iyes_perf_ui = { git = "https://github.com/IyesGames/iyes_perf_ui.git" }
 
+[profile.release]
+opt-level = 'z'
+lto = true
+codegen-units = 1
+
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
 opt-level = 1
