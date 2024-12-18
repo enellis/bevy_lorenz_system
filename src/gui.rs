@@ -1,7 +1,11 @@
 use bevy::{ecs::system::SystemState, prelude::*, window::PrimaryWindow};
 use bevy_egui::{egui, EguiContext, EguiPlugin};
 
-use crate::{spawn_trail_heads, Configuration, SimpleColorMaterial, TimeOfBirth, TrailHead};
+use crate::{
+    spawn_trail_heads,
+    trails::{TrailSegment, Trails},
+    Configuration, SimpleColorMaterial, TrailHead,
+};
 
 pub struct ControlUIPlugin;
 
@@ -36,23 +40,26 @@ fn control_ui(world: &mut World) {
 
 fn clear(world: &mut World) {
     let mut system_state: SystemState<(
-        Query<
-            (Entity, &Mesh3d, &MeshMaterial3d<SimpleColorMaterial>),
-            Or<(With<TrailHead>, With<TimeOfBirth>)>,
-        >,
+        Query<(Entity, &Mesh3d, &MeshMaterial3d<SimpleColorMaterial>), With<TrailHead>>,
+        Query<&mut Trails>,
         ResMut<Assets<Mesh>>,
         ResMut<Assets<SimpleColorMaterial>>,
         Commands,
     )> = SystemState::new(world);
 
-    let (mut query, mut meshes, mut simple_color_materials, mut commands) =
+    let (mut q_heads, mut q_trails, mut meshes, mut simple_color_materials, mut commands) =
         system_state.get_mut(world);
 
-    query.iter_mut().for_each(|(entity, mesh, material)| {
+    q_heads.iter_mut().for_each(|(entity, mesh, material)| {
         commands.entity(entity).despawn_recursive();
         meshes.remove(mesh);
         simple_color_materials.remove(material);
     });
+
+    let mut trails = q_trails.single_mut();
+    trails.segments.clear();
+    // Segments data must not be empty
+    trails.segments.push_back(TrailSegment::default());
 
     system_state.apply(world);
 }

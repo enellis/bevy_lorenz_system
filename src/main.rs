@@ -1,16 +1,21 @@
 mod gui;
+mod trails;
+
+use std::collections::VecDeque;
 
 use bevy::{
     prelude::*,
     render::{
         mesh::{CylinderAnchor, CylinderMeshBuilder},
         render_resource::{AsBindGroup, ShaderRef},
+        view::NoFrustumCulling,
     },
 };
 use bevy_inspector_egui::{prelude::*, quick::ResourceInspectorPlugin};
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use gui::ControlUIPlugin;
 use iyes_perf_ui::prelude::*;
+use trails::{TrailMaterialPlugin, TrailSegment, Trails};
 
 const NUM_OF_TRAILS: u16 = 10;
 const INITIAL_DISTANCE: f32 = 0.01;
@@ -31,6 +36,7 @@ struct Configuration {
     sigma: f32,
     rho: f32,
     beta: f32,
+    trail_segment_count: usize,
 }
 
 impl Default for Configuration {
@@ -47,6 +53,7 @@ impl Default for Configuration {
             sigma: 10.,
             rho: 28.,
             beta: 8. / 3.,
+            trail_segment_count: 0,
         }
     }
 }
@@ -56,12 +63,8 @@ struct TrailHead;
 
 #[derive(Component)]
 struct TrailData {
-    mesh: Handle<Mesh>,
-    material: Handle<SimpleColorMaterial>,
+    color: LinearRgba,
 }
-
-#[derive(Component, Deref, DerefMut)]
-struct TimeOfBirth(f32);
 
 fn main() {
     App::new()
@@ -69,6 +72,7 @@ fn main() {
             DefaultPlugins,
             ControlUIPlugin,
             MaterialPlugin::<SimpleColorMaterial>::default(),
+            TrailMaterialPlugin,
             PanOrbitCameraPlugin,
         ))
         //
@@ -92,28 +96,44 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             Update,
-            apply_physics_refresh_rate.run_if(|config: Res<Configuration>| config.is_changed()),
+            (apply_new_lifetime, apply_physics_refresh_rate)
+                .run_if(|config: Res<Configuration>| config.is_changed()),
         )
         .add_systems(
             Update,
             rotate_camera.run_if(|config: Res<Configuration>| config.rotate_camera),
         )
         .add_systems(FixedUpdate, update_position)
-        .add_systems(
-            Update,
-            (shrink_trail_segments, remove_old_trail_segments).chain(),
-        )
         //
         .run();
 }
 
 fn setup(
     mut commands: Commands,
-    meshes: ResMut<Assets<Mesh>>,
+    mut meshes: ResMut<Assets<Mesh>>,
     simple_color_materials: ResMut<Assets<SimpleColorMaterial>>,
     config: Res<Configuration>,
 ) {
     commands.insert_resource(Time::<Fixed>::from_hz(config.physics_refresh_rate as f64));
+
+    let mut segments_data = VecDeque::with_capacity(16384);
+    // Segments data must not be empty
+    segments_data.push_back(TrailSegment::default());
+
+    commands.spawn((
+        Mesh3d(
+            meshes.add(
+                CylinderMeshBuilder::new(0.12, 1., 32)
+                    .anchor(CylinderAnchor::Bottom)
+                    .without_caps()
+                    .build(),
+            ),
+        ),
+        Trails {
+            segments: segments_data,
+        },
+        NoFrustumCulling,
+    ));
 
     spawn_trail_heads(&mut commands, meshes, simple_color_materials, config);
 
@@ -133,12 +153,6 @@ fn spawn_trail_heads(
     config: Res<Configuration>,
 ) {
     let head_mesh = meshes.add(Sphere::new(0.3));
-    let trail_mesh = meshes.add(
-        CylinderMeshBuilder::new(0.12, 1., 32)
-            .anchor(CylinderAnchor::Bottom)
-            .without_caps()
-            .build(),
-    );
 
     for i in 1..=config.num_of_trails {
         let ratio = i as f32 / NUM_OF_TRAILS as f32;
@@ -146,9 +160,6 @@ fn spawn_trail_heads(
         let head_color = Hsla::hsl(ratio * 360., 0.7, 0.5);
         let head_material = simple_color_materials.add(SimpleColorMaterial {
             color: head_color.into(),
-        });
-        let trail_material = simple_color_materials.add(SimpleColorMaterial {
-            color: head_color.with_saturation(0.3).into(),
         });
 
         let initial_pos = i as f32 * config.initial_distance;
@@ -158,10 +169,24 @@ fn spawn_trail_heads(
             MeshMaterial3d(head_material.clone()),
             Transform::from_translation(Vec3::splat(initial_pos)),
             TrailData {
-                mesh: trail_mesh.clone(),
-                material: trail_material.clone(),
+                color: head_color.with_saturation(0.3).into(),
             },
         ));
+    }
+}
+
+fn apply_new_lifetime(mut query: Query<&mut Trails>, config: Res<Configuration>) {
+    let mut trails = query.single_mut();
+    let new_lifetime = config.trail_lifetime as f32 / 10.;
+    if trails
+        .segments
+        .front()
+        .is_some_and(|segment| segment.lifetime != new_lifetime)
+    {
+        trails
+            .segments
+            .iter_mut()
+            .for_each(|segment| segment.lifetime = new_lifetime);
     }
 }
 
@@ -192,12 +217,21 @@ fn rotate_camera(mut query: Query<&mut PanOrbitCamera>, config: Res<Configuratio
 }
 
 fn update_position(
-    mut query: Query<(&mut Transform, &TrailData), With<TrailHead>>,
-    mut commands: Commands,
+    mut q_heads: Query<(&mut Transform, &TrailData)>,
+    mut q_trails: Query<&mut Trails>,
     time: Res<Time<Virtual>>,
-    config: Res<Configuration>,
+    mut config: ResMut<Configuration>,
 ) {
-    for (mut transform, trail_data) in &mut query {
+    let mut trails = q_trails.single_mut();
+
+    // Delete old segments
+    if let Some(index) = trails.segments.iter().position(|segment| {
+        time.elapsed_secs() - segment.birth_time < config.trail_lifetime as f32 / 10.
+    }) {
+        trails.segments.drain(..index);
+    };
+
+    for (mut transform, trail_data) in &mut q_heads {
         let old_translation = transform.translation.clone();
 
         let dx = config.sigma * (old_translation.y - old_translation.x);
@@ -209,43 +243,17 @@ fn update_position(
         let new_translation = old_translation + delta;
         transform.translation = new_translation;
 
-        commands.spawn((
-            Mesh3d(trail_data.mesh.clone()),
-            MeshMaterial3d(trail_data.material.clone()),
-            Transform::from_translation(old_translation)
-                .with_scale(Vec3::new(1., delta.length(), 1.))
-                .with_rotation(Quat::from_rotation_arc(Vec3::Y, delta.normalize())),
-            TimeOfBirth(time.elapsed_secs()),
-        ));
-    }
-}
-
-fn shrink_trail_segments(
-    mut query: Query<(&mut TimeOfBirth, &mut Transform)>,
-    time: Res<Time>,
-    config: Res<Configuration>,
-) {
-    query
-        .par_iter_mut()
-        .for_each(|(mut time_of_birth, mut transform)| {
-            let ratio = 1.
-                - ((time.elapsed_secs() - **time_of_birth) / (config.trail_lifetime as f32 / 10.));
-            if ratio > 0. {
-                transform.scale.x = ratio;
-                transform.scale.z = ratio;
-            } else {
-                // Set time of birth to 0, so we can clean it up later.
-                **time_of_birth = 0.
-            }
+        trails.segments.push_back(TrailSegment {
+            position: old_translation,
+            length: delta.length(),
+            rotation: Quat::from_rotation_arc(Vec3::Y, delta.normalize()).to_array(),
+            color: trail_data.color.to_vec3(),
+            birth_time: time.elapsed_secs(),
+            lifetime: config.trail_lifetime as f32 / 10.,
         });
-}
+    }
 
-fn remove_old_trail_segments(query: Query<(Entity, &TimeOfBirth)>, mut commands: Commands) {
-    query.iter().for_each(|(entity, time_of_birth)| {
-        if **time_of_birth == 0. {
-            commands.entity(entity).despawn();
-        }
-    });
+    config.trail_segment_count = trails.segments.len();
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
