@@ -1,0 +1,5 @@
+[build]
+public_url = "https://enellis.github.io/bevy_lorenz_system/"
+target = "Trunk.html"
+release = true
+minify = "on_release"
