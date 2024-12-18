@@ -1,3 +1,5 @@
+mod gui;
+
 use bevy::{
     prelude::*,
     render::{
@@ -7,9 +9,10 @@ use bevy::{
 };
 use bevy_inspector_egui::{prelude::*, quick::ResourceInspectorPlugin};
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
+use gui::ControlUIPlugin;
 use iyes_perf_ui::prelude::*;
 
-const NUM_OF_TRAILS: i32 = 10;
+const NUM_OF_TRAILS: u16 = 10;
 const INITIAL_DISTANCE: f32 = 0.01;
 const TRAIL_LIFETIME: u16 = 100; // in tenths of a second
 const DELTA_T: u8 = 50;
@@ -19,21 +22,31 @@ const DELTA_T: u8 = 50;
 struct Configuration {
     show_diagnostics: bool,
     rotate_camera: bool,
-    rotation_speed: i32,
-    trail_lifetime: u16, // in tenths of a second
-    delta_t: u8,
+    camera_speed: i32,
     physics_refresh_rate: u16,
+    trail_lifetime: u16, // in tenths of a second
+    num_of_trails: u16,
+    initial_distance: f32,
+    delta_t: u8,
+    sigma: f32,
+    rho: f32,
+    beta: f32,
 }
 
 impl Default for Configuration {
     fn default() -> Self {
         Self {
-            show_diagnostics: true,
+            show_diagnostics: false,
             rotate_camera: false,
-            rotation_speed: 10,
-            trail_lifetime: TRAIL_LIFETIME,
-            delta_t: DELTA_T,
+            camera_speed: 10,
             physics_refresh_rate: 120,
+            trail_lifetime: TRAIL_LIFETIME,
+            num_of_trails: NUM_OF_TRAILS,
+            initial_distance: INITIAL_DISTANCE,
+            delta_t: DELTA_T,
+            sigma: 10.,
+            rho: 28.,
+            beta: 8. / 3.,
         }
     }
 }
@@ -54,6 +67,7 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
+            ControlUIPlugin,
             MaterialPlugin::<SimpleColorMaterial>::default(),
             PanOrbitCameraPlugin,
         ))
@@ -95,12 +109,29 @@ fn main() {
 
 fn setup(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut simple_color_materials: ResMut<Assets<SimpleColorMaterial>>,
+    meshes: ResMut<Assets<Mesh>>,
+    simple_color_materials: ResMut<Assets<SimpleColorMaterial>>,
     config: Res<Configuration>,
 ) {
     commands.insert_resource(Time::<Fixed>::from_hz(config.physics_refresh_rate as f64));
 
+    spawn_trail_heads(&mut commands, meshes, simple_color_materials, config);
+
+    commands.spawn((
+        Transform::from_translation(Vec3::new(1., 0., 1.) * 80.),
+        PanOrbitCamera {
+            focus: Vec3::new(0., 0., 30.),
+            ..default()
+        },
+    ));
+}
+
+fn spawn_trail_heads(
+    commands: &mut Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut simple_color_materials: ResMut<Assets<SimpleColorMaterial>>,
+    config: Res<Configuration>,
+) {
     let head_mesh = meshes.add(Sphere::new(0.3));
     let trail_mesh = meshes.add(
         CylinderMeshBuilder::new(0.12, 1., 32)
@@ -109,7 +140,7 @@ fn setup(
             .build(),
     );
 
-    for i in 1..=NUM_OF_TRAILS {
+    for i in 1..=config.num_of_trails {
         let ratio = i as f32 / NUM_OF_TRAILS as f32;
 
         let head_color = Hsla::hsl(ratio * 360., 0.7, 0.5);
@@ -120,7 +151,7 @@ fn setup(
             color: head_color.with_saturation(0.3).into(),
         });
 
-        let initial_pos = i as f32 * INITIAL_DISTANCE;
+        let initial_pos = i as f32 * config.initial_distance;
         commands.spawn((
             TrailHead,
             Mesh3d(head_mesh.clone()),
@@ -132,14 +163,6 @@ fn setup(
             },
         ));
     }
-
-    commands.spawn((
-        Transform::from_translation(Vec3::new(1., 0., 1.) * 80.),
-        PanOrbitCamera {
-            focus: Vec3::new(0., 0., 30.),
-            ..default()
-        },
-    ));
 }
 
 fn apply_physics_refresh_rate(config: Res<Configuration>, mut fixed_time: ResMut<Time<Fixed>>) {
@@ -164,7 +187,7 @@ fn toggle_diagnostics(
 
 fn rotate_camera(mut query: Query<&mut PanOrbitCamera>, config: Res<Configuration>) {
     for mut camera in &mut query {
-        camera.target_yaw += config.rotation_speed as f32 / 10_000.;
+        camera.target_yaw += config.camera_speed as f32 / 10_000.;
     }
 }
 
@@ -177,13 +200,9 @@ fn update_position(
     for (mut transform, trail_data) in &mut query {
         let old_translation = transform.translation.clone();
 
-        const SIGMA: f32 = 10.;
-        const RHO: f32 = 28.;
-        const BETA: f32 = 8. / 3.;
-
-        let dx = SIGMA * (old_translation.y - old_translation.x);
-        let dy = old_translation.x * (RHO - old_translation.z) - old_translation.y;
-        let dz = old_translation.x * old_translation.y - BETA * old_translation.z;
+        let dx = config.sigma * (old_translation.y - old_translation.x);
+        let dy = old_translation.x * (config.rho - old_translation.z) - old_translation.y;
+        let dz = old_translation.x * old_translation.y - config.beta * old_translation.z;
         let dt = config.delta_t as f32 / 10000.;
 
         let delta = Vec3::new(dx, dy, dz) * dt;

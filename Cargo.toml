@@ -9,6 +9,7 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 bevy = { version = "0.15.0", features = ["dynamic_linking"] }
 bevy-inspector-egui = "0.28.0"
+bevy_egui = "0.31.1"
 bevy_panorbit_camera = { version = "0.21.1", features = ["bevy_egui"] }
 iyes_perf_ui = { git = "https://github.com/IyesGames/iyes_perf_ui.git" }
 
